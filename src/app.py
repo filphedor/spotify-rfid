@@ -35,7 +35,6 @@ def read_loop():
 
 		if current != None and current != last_read:
 			try:
-				print(current)
 				app_spotify_service.play_item(current)
 				last_read = current
 			except:
@@ -79,5 +78,5 @@ finally:
 	GPIO.cleanup()
 
 if __name__ == "__main__":
-    app.run(debug=False, host="0.0.0.0", port=8000, ssl_context=('./ssl/cert.crt', './ssl/key.key'))
+    app.run(debug=True, host="0.0.0.0", port=8000, ssl_context=('./ssl/cert.crt', './ssl/key.key'))
 

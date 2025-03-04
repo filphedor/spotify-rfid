@@ -1,4 +1,7 @@
+import time
+
 import requests
+
 
 class SpotifyService:
 	def __init__(self, client_id):
@@ -65,13 +68,25 @@ class SpotifyService:
 
 		return data
 
+	def wait_for_queue_change(self, orig_queue):
+		tries = 0
+		current_queue = orig_queue
+
+		while tries < 5 and current_queue == orig_queue:
+			current_queue = self.get_queue()
+
+			tries = tries + 1
+			time.sleep(1)
+
+
+
 	def skip(self):
 		def skip_call():
 			url = 'https://api.spotify.com/v1/me/player/next'
 
 			response = requests.post(url, {}, headers=self.get_headers())
 
-			if response.status_code == 204:
+			if response.status_code == 200:
 				return response
 			else:
 				print(response.status_code)
@@ -81,6 +96,13 @@ class SpotifyService:
 		self.wrap_with_auth_try(skip_call)
 
 		return 
+
+	def ensure_skip(self):
+		orig_queue = self.get_queue()
+
+		self.skip()
+
+		self.wait_for_queue_change(orig_queue)
 
 
 	def clear_queue_to_song(self, uri):
@@ -93,7 +115,7 @@ class SpotifyService:
 				if queue.get('currently_playing').get('uri') == uri:
 					return
 				else:
-					self.skip()
+					self.ensure_skip()
 
 			else:
 				return
@@ -109,14 +131,21 @@ class SpotifyService:
 
 			response = requests.post(url, headers=self.get_headers(), params=params)
 
-			if response.status_code == 204:
+			if response.status_code == 200:
 				return response
 			else:
-				print(response.status_code)
-				print(response.text)
 				raise Exception('Add unsuccessful')
 
 		self.wrap_with_auth_try(add_item_call)
+
+		return
+
+	def add_item_to_queue_with_wait(self, uri):
+		orig_queue = self.get_queue()
+
+		self.add_item_to_queue(uri)
+
+		self.wait_for_queue_change(orig_queue)
 
 		return
 	
@@ -147,7 +176,7 @@ class SpotifyService:
 		tracks = self.get_album_tracks(uri)
 
 		for track in tracks:
-			self.add_item_to_queue(track.get('uri'))
+			self.add_item_to_queue_with_wait(track.get('uri'))
 
 	def play_item(self, uri):
 		try:
