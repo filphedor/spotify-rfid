@@ -1,7 +1,7 @@
 
 import os
 from time import sleep
-from threading import Thread
+from threading import Thread, Lock
 
 from flask import Flask, request
 from flask_cors import CORS
@@ -19,9 +19,12 @@ app_spotify_service = SpotifyService(os.environ['SPOTIFY_CLIENT_ID'])
 app = Flask(__name__)
 CORS(app)
 
+rfid_lock = Lock()
+
 def check_for_tag():
 	try:
-		id, text = reader.read_no_block()
+		with rfid_lock:
+			id, text = reader.read_no_block()
 	except:
 		print('Read failed')
 
@@ -51,8 +54,9 @@ def write():
 	if id == None:
 		return "Need album id", 400
 	try:
-		reader.write(id)
-		return "", 201
+		with rfid_lock:
+			reader.write(id)
+			return "", 201
 	except:
 		return "Coulnd't write", 500
 
