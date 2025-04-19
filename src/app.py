@@ -58,14 +58,17 @@ def write():
 			reader.write(id)
 			return "", 201
 	except:
-		return "Coulnd't write", 500
+		return "Couldn't write", 500
 
 
 @app.route('/is-connected', methods=['GET'])
 def test_connection():
-	app_spotify_service.get_queue()
+	try:
+		app_spotify_service.get_queue()
 
-	return 'OK', 200
+		return 'OK', 200
+	except Exception:
+		return "Can't communicate with Spotify", 500
 
 @app.route('/auth', methods=['POST'])
 def auth():

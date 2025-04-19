@@ -12,30 +12,30 @@ class SpotifyService:
 		self.token = token
 
 	def refresh_token(self):
-		url = 'https://accounts.spotify.com/api/token'
-
-		headers = {
-			'Content-Type': 'application/x-www-form-urlencoded'
-		}
-
-		data = {
-			'grant_type': 'refresh_token',
-			'refresh_token': self.token.get('refresh_token'),
-			'client_id': self.client_id
-		}
-
 		try:
+			url = 'https://accounts.spotify.com/api/token'
+
+			headers = {
+				'Content-Type': 'application/x-www-form-urlencoded'
+			}
+
+			data = {
+				'grant_type': 'refresh_token',
+				'refresh_token': self.token.get('refresh_token'),
+				'client_id': self.client_id
+			}
+
 			response = requests.post(url, headers=headers, data=data)
 
-			if response.status_code == 200:
+
+			if response.ok:
 				new_token = response.json()
 				self.token = new_token
-
 			else:
-				raise Exception('Refresh request unsuccessful')
+				raise Exception('Refresh request unsuccessful: ' + response.text)
 
-		except:
-			raise Exception('Failed to refresh token')
+		except Exception as e:
+			raise Exception('Failed to refresh token') from e
 
 	def get_headers(self):
 		return {
@@ -45,11 +45,16 @@ class SpotifyService:
 	def wrap_with_auth_try(self, f):
 		try:
 			response = f()
+
 			return response
-		except:
-			self.refresh_token()
-			response = f()
-			return response
+		except Exception as e:
+			try:
+				self.refresh_token()
+				response = f()
+
+				return response
+			except Exception as e2:
+				raise Exception('Request error') from e2
 
 	def get_queue(self):
 		def get_queue_call():
@@ -57,16 +62,72 @@ class SpotifyService:
 
 			response = requests.get(url, headers=self.get_headers())
 
-			if response.status_code == 200:
+			if response.ok:
 				return response
 			else:
-				raise Exception('Get queue unsuccessful')
+				raise Exception('Get queue unsuccessful: ' + str(response.status_code))
 
 		response = self.wrap_with_auth_try(get_queue_call)
 
 		data = response.json()
 
 		return data
+
+	def add_item_to_queue(self, uri):
+		def add_item_call():
+			url = 'https://api.spotify.com/v1/me/player/queue'
+
+			params = {
+				'uri': uri
+			}
+
+			response = requests.post(url, headers=self.get_headers(), params=params)
+
+			if response.ok:
+				return response
+			else:
+				raise Exception('Add unsuccessful: ' + str(response.status_code))
+
+		self.wrap_with_auth_try(add_item_call)
+
+		return
+
+	def skip(self):
+		def skip_call():
+			url = 'https://api.spotify.com/v1/me/player/next'
+
+			response = requests.post(url, {}, headers=self.get_headers())
+
+			if response.ok:
+				return response
+			else:
+				raise Exception('Skip unsuccessful' + str(response.status_code))
+
+		self.wrap_with_auth_try(skip_call)
+
+		return 
+	
+	def get_album_tracks(self, uri):
+		def get_tracks_call():
+			album_id = uri.split(':')[2].strip()
+			
+			url = 'https://api.spotify.com/v1/albums/' + album_id + '/tracks'
+
+			params = {'limit': 50}
+
+			response = requests.get(url, headers=self.get_headers(), params=params)
+
+			if response.ok:
+				return response
+			else:
+				raise Exception('Get tracks unsuccessful: ' + str(response.status_code))
+
+		response = self.wrap_with_auth_try(get_tracks_call)
+
+		data = response.json()
+
+		return data.get('items')
+	
 
 	def wait_for_queue_change(self, orig_queue):
 		tries = 0
@@ -78,24 +139,6 @@ class SpotifyService:
 			tries = tries + 1
 			time.sleep(1)
 
-
-
-	def skip(self):
-		def skip_call():
-			url = 'https://api.spotify.com/v1/me/player/next'
-
-			response = requests.post(url, {}, headers=self.get_headers())
-
-			if response.status_code == 200:
-				return response
-			else:
-				print(response.status_code)
-				print(response.text)
-				raise Exception('Skip unsuccessful')
-
-		self.wrap_with_auth_try(skip_call)
-
-		return 
 
 	def ensure_skip(self):
 		orig_queue = self.get_queue()
@@ -121,25 +164,6 @@ class SpotifyService:
 				return
 
 
-	def add_item_to_queue(self, uri):
-		def add_item_call():
-			url = 'https://api.spotify.com/v1/me/player/queue'
-
-			params = {
-				'uri': uri
-			}
-
-			response = requests.post(url, headers=self.get_headers(), params=params)
-
-			if response.status_code == 200:
-				return response
-			else:
-				raise Exception('Add unsuccessful')
-
-		self.wrap_with_auth_try(add_item_call)
-
-		return
-
 	def add_item_to_queue_with_wait(self, uri):
 		orig_queue = self.get_queue()
 
@@ -149,33 +173,12 @@ class SpotifyService:
 
 		return
 	
-	def get_album_tracks(self, uri):
-		def get_tracks_call():
-			album_id = uri.split(':')[2].strip()
-			
-			print(album_id)
-			
-			url = 'https://api.spotify.com/v1/albums/' + album_id + '/tracks'
-
-			params = {'limit': 50}
-
-			response = requests.get(url, headers=self.get_headers(), params=params)
-
-			if response.status_code == 200:
-				return response
-			else:
-				raise Exception('Get tracks unsuccessful')
-
-		response = self.wrap_with_auth_try(get_tracks_call)
-
-		data = response.json()
-
-		return data.get('items')
 
 	def add_album_to_queue(self, uri):
 		tracks = self.get_album_tracks(uri)
 
 		for track in tracks:
+			print(track)
 			self.add_item_to_queue_with_wait(track.get('uri'))
 
 	def play_item(self, uri):
